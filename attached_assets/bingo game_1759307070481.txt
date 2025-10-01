@@ -1,0 +1,374 @@
+Bingo game UI and some logics
+A bingo game that is a telegram mini app. the game runs 24/7.
+React Router for navigation (/dashboard, /deposit, /withdraw, /transfer, /support, /game_picking, game_running)
+Dark, textured background with subtle radial grid (background-image and --background-texture).
+Vibrant glowing accents (orange for primary, cyan for secondary).
+Glossy highlights on cards and buttons.
+Rounded corners everywhere, shadows for depth.
+Poppins font.
+Fixed "Play" circle glowing button at the bottom, only visible on Dashboard.
+Navigation grid: Deposit, Withdraw, Transfer, Support (with SVG icons).
+
+🔹 Pages & Logic
+If user doesn't registered meaning can be find from PostgreSQL then all data's will be just none only the users name is shown that is gotten from the telegram users first name and can't be edited until the user register. all page is not accessible until the user register. when the user opens the mini app and is not registered the mini app asks the user to share the users phone number. when the user try's to access any page or edit their name the mini app askes the user to share their number. 
+1. Dashboard (/dashboard)
+Header: "Dm Bingo" glowing logo.
+Profile box with:
+Greeting → “Hi, {PostgreSQL user.first_name}!”
+Edit name button → opens prompt input.
+Wallet balances → Withdrawable (green) and Non-Withdrawable (white).
+Total wallet.
+Navigation grid (Deposit, Withdraw, Transfer, Support).
+Fixed Play Now button at the bottom center → /play.
+Logic:
+On load → fetch user data from PostgreSQL.
+Edit Name: prompt input → must be ≤ 8 characters, no emojis. If invalid → show Toast error. If valid → update to PostgreSQL and toast success
+2. Deposit Page (/deposit)
+Bank info box (static, from config):
+CBE: 1000061649046 - Daniel Wagaye and copy button that copies the account number
+BOA: 175278729 - Daniel Wagaye and copy button that copies the account number 
+Telebirr: 0924570285 - Daniel Wagaye and copy button that copies the account number)
+CBE-Birr: 0940067850 - Daniel Wagaye and copy button that copies the account number)
+Textarea: "Paste Bank SMS Confirmation" → paste full bank SMS.
+Button: "Validate Deposit".
+Logic:
+On click → parse the SMS and send transaction reference number in JSON to /api/deposit/validate. If the parse fails toast error "Incorrect"
+This are the format that the frontend parses
+"
+'Dear Sewagegn your Account 1***4293 has been debited with ETB5.00 .Service charge of  ETB0 and VAT(15%) of ETB0.00 with a total of ETB5. Your Current Balance is ETB 7,234.24. Thank you for Banking with CBE! https://apps.cbe.com.et:100/?id=FT25234JC66N69004293'
+'Dear DANEL, your account 1*29 was debited with ETB 50.00. Available Balance:  ETB 75.98. Receipt: https://cs.bankofabyssinia.com/slip/?trx=FT2523499LD678729 
+Feedback: https://cs.bankofabyssinia.com/cs/?trx=DFT2523499LD6 For help, call 8397 (24/7 Toll-Free). Bank of Abyssinia.'
+'Dear DANIEL, you have sent 5.00Br. to sewagegn fenta on 22/08/25 15:22,Txn ID CHM4SIDRS0. Your CBE Birr account balance is 131.05Br.Thank you! For invoice https://cbepay1.cbe.com.et/aureceipt?TID=CHM4SIDRS0&PH=251924570285 For your feedback please click the link https://shorturl.at/gy3A0'
+'Dear Danieal 
+You have transferred ETB 800.00 to Aaron Kefeyalew (2519****9908) on 13/09/2025 23:26:42. Your transaction number is CID2TAT98W. The service fee is  ETB 3.48 and  15% VAT on the service fee is ETB 0.52. Your current E-Money Account  balance is ETB 34.47. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/CID2TAT98W.
+
+Thank you for using telebirr
+Ethio telecom'
+"
+this are the transaction reference number in order FT25234JC66N69004293, FT2523499LD678729, CHM4SIDRS0 and CID2TAT98W that the frontend gets from the full SMS text. this  transaction refernce numbers can get changed but the SMS text format is permanent.
+when the backend receive transaction reference number it will validate the deposit by matching it to the PostgreSQL deposits.tx_reference and checking the PostgreSQL deposits.status = 'pending'. if it gets the match with pending status then the backend credits the player non_withdrawal wallet by amount of PostgreSQL deposits.amount that is stored before from the admin. and then changes the PostgreSQL deposits.status to 'approved' and add timstamp to deposits.approved_at. then it Toast success: "Your balance has been credited with X(PostgreSQL deposits.amount) ETB.". but if PostgreSQL = approved then Toast error "TopUp with reference id X already exists". if the backend doesn't get a much in the databse then Toast error "Invalid deposit confirmation".
+
+3. Withdraw Page
+Balance:
+x(PostgreSQL users.withdrawal_wallet)
+Fields:
+Amount (min 100).
+Account holder full name.
+Bank (CBE, BOA, Telebirr, CBEbirr).
+Account number (rules below).
+Button: "Request Withdrawal".
+Validation Rules:
+Amount must be ≥ 100, else Toast error "Withdraw amount must be greater than or equal to 100".
+Withdrawal balance must be ≥ requested amount, else Toast error "Insufficient balance. Withdrawable balance: X".
+Name must be ≤ 20 characters, no digits, no emojis, no special character. Else toast error "Please enter a valid account holder name".
+Bank-specific account number rules:
+CBE → exactly 13 digits.
+BOA → exactly 9 digits.
+Telebirr → 10 digits, must start with 09.
+CBEbirr → 10 digits, must start with 09 or 07.
+Else toast error "The account number is not correct".
+On Success:
+Call /api/withdraw/request.
+Backend saves request to PostgreSQL withdrawals_request with status pending.
+Toast promis: "Your withdrawal is under progress. This may take a few minutes!".
+
+4. Transfer Page (/transfer)
+withdrawable:
+x(PostgreSQL user.withdrawal_wallet)
+Non-withdrawable:
+y(PostgreSQL user.non_withdrawal_wallet)
+Fields:
+Wallet source (withdrawable PostgreSQL user.withdrawal_wallet / non-withdrawable (PostgreSQL user.non_withdrawal_wallet )).
+Amount.
+Recipient phone number.
+Button: "Send Transfer".
+Validation Rules:
+Amount must be ≥ 10, else Toast error "Transfer amount must be greater than or equal to 10".
+Only whole numbers (no decimals). Else toast error "Only whole number please".
+Selected wallet Balance must be ≥ amount + 0.5% commission. Else toast error "Insufficient Balance".
+Recipient phone must be 10 digits, start with 09 or 07. Else toast error "The user number is not correct".
+Then the backend removes the first digit 0 and add +251 to the number and the finds from PostgreSQL user. If user not found then toast error "User doesn’t exist".
+On Success:
+Backend deducts (amount + commission) from sender wallet.
+Adds amount to recipient wallet the same as the sender chooses.
+Saves transfer history to PostgreSQL transfer_history.
+Then Toast success: "You have successfully transferred X to {phone}. Transfer fee: Y".
+Receiver gets a bot notification "You have received X from {sender}. Your total wallet is =".
+5. Support Page (/support)
+Static links to Telegram usernames:
+@danielwagaye
+@Natii_lala
+@desalegn
+@sewagegn
+
+Play button redirects the user to Game page it has two pages and one pop up screen. This are picking bingo card page, playing game board page and winning declaration pop up display. When a user clicks the play button in the landing page the backend checks the game pahse from Redis game:<id>phase: and redirects user to the game phase page. if it's in picking phase then all players get directed to /game_picking, if it's in started then all players gets directed to /game_started 
+
+picking page(/game_picking)
+The picking page screen is sleek and vibrant, presented with a clean UI/UX design. The background is dark with a subtle texture, making the colorful game elements pop. At the top, three glossy rounded rectangular stat boxes sit side-by-side: the left box is larger and displays the countdown (It gets data from Redis game:<id>:end_time and calculte and start countdown)  in bold glowing orange, the middle box reads the user total Wallet (from PostgreSQL users.withdrawal_wallet + users.non_withdrawal_wallet)  in crisp white, and the right box reads the game stake(from Redis game:<id>:stake_amount) in crisp white. All boxes have glossy highlights, rounded corners, and soft shadows for a polished look.
+Below, a tall scrollable panel presents the number-selection grid from 1–400. The numbers is in rounded square tiles: unpicked tiles are cool gray with white numbers, picked by another player tiles glow in bright orange, and the player chosen number is highlighted in deep green. when a player unselect them they go back to cool gray . A slim glossy vertical scrollbar on the right suggests more numbers continue down to 400.
+At the bottom,  there is a small player’s picked Bingo card is displayed in the same vibrant style. It is a centered 5×5 grid with colorful headers: Blue “B”, Red “I”, Green “N”, Yellow “G”, and Purple “O”. This card numbers with board is prebuilt with the frontend so it just store the player picked board number rather that to fetch bingo cards and assemble them. The grid box have glossy highlights, soft inner shadows, and bright readable numbers, with the center grid box showing a vibrant green “FREE” space. The framing and spacing are consistent with the dark, textured background.
+The overall page look is polished, professional, and engaging, high quality telegram mini app with dark textured depth, glossy highlights, bold vibrant colors, and crisp typography.
+The picking page is where the player picks one number from 1 to 400, in this numbers there is predefined 5 * 5 bingo card with the middle number being free, they can change there number and unselect their pick until the picking count down is done which is 30 sec. the picking phase is live showing others player picking with orange color and own picked number with green color. to pick a number the number must not be picked by other and the player have to have wallet balance equal or high to the stake. If the player try's to pick board number while having 0 wallet balance(withdrawal_wallet + non_withdrawal_wallet) it uses the toast error: 'insufficient Balance'. And if a player try's to pick board number that is already picked by others toast error: 'Board number x(the board number that the players try to pick but picked by others) is picked'. but if the other player change their picks the player can then pick that number.  After the picking phase count down is done which is 30 sec the backend check that there is at least 5 players that picked board numbers. if true then all players(the player who picked board number and also the player that haven't picked board number) to the game board page. But If all the players that picked board number is less than 5 after 30 second count down it toast: 'The player must be 5 or greater to start the game', then it will count down 30 second again and over again until there is at least 5 players that picked board number after countdown is finished.
+playing game page(/game_started):
+The playing game page is sleek and vibrant user interface for a modern online bingo game, presented with a clean UI/UX design. The screen has a dark, subtly textured background that makes the colorful game elements pop.
+At the top, a header features four distinct, glossy rectangular boxes displaying game statistics in a clear digital font: 'Prize', 'Players', 'Bet', and 'Call '.
+These header rectangular boxes is: Prize = Redis game:<id>:prize_amount. Player = Redis game:<id>:active_players. Bet(Stake) = Redis game:<id>:stake. Call: tootal counted numbers in Redis game:<id>:called_number. 
+The main area is organized into a clear two-column layout.
+On the left, the master Bingo calling sheet neatly displays all numbers from 1-75 under the “B”, Red “I”, Green “N”, Yellow “G”, and Purple “O” column headers. The master Bingo calling sheet 1-75 numbers shows all the called number by coloring the current called number green and the previous called numbers orange color. helps the player to check if they missed to mark a called number. 
+On the right top there is a bright yellow 'Started' in box that is prominently displayed showing the game status. Below it, a rounded box saying Current call   'x' shows the currently called number, (e.g., current call N34) by Fetching the last called number from Redis game<id>:called. Underneath this, a horizontal row shows the four most recently called numbers by Fetching the last four called number from Redis game<id>:called. each in its own circular box. Below the recent calls there is a bingo box. in this box there is the player's personal 5x5 Bingo card grid tiles with colorful headers: Blue “B”, Red “I”, Green “N”, Yellow “G”, and Purple “O”. beneath the bingo card in the box A small label reads 'Board number (x)' tells the player their picked board number. For those players that doesn't picked board number they only sees 'Get ready to pick your card for the next round!' instead the bingo card in the bingo box. The player can dab(mark) the bingo card number tiles with green color when they click(touch) the tiles. dabbing(marking) the bingo card number tiles helps the player to keep track of the numbers that have been called, so they can determine when they have a winning pattern. The player can undubbed(unmarked) bingo card number tiles by clicking again on the dabbed tiles. 
+At the bottom of the screen, a large, appealing, rounded rectangular button is centered, glowing invitingly with the word 'BINGO!' in a bold, exciting font. This button is shown only for the player who picked board numbers . 
+The overall page look is polished, professional, and engaging, high quality telegram mini app with dark textured depth, glossy highlights, bold vibrant colors, and crisp typography. 
+The Bingo button validates a player's win. It get activated to be clicked after 2 numbers are called
+Invalid Claim: If a player clicks the button without a winning pattern, the Bingo button will be removed meaning they get disqualified.
+Valid Claim: If the player(s) is correct, the game is paused for everyone. A large pop-up screen then appears on all players screens, announcing the winner(s) name and displaying their winning card.
+
+page 3(pop up display): 
+The pop up display is a sleek and vibrant, presented with a clean UI/UX design. The pop up has a dark, subtly textured background. At the top, a bold glossy box displays “BINGO!” in large white letters. Beneath it there is a notification box. If only one winner wins  the notification box says "'Player name' has won the game”. player name is highlighted in green color. if the winners is two or more the notification box says "'Player name' and x (the total numbers of players who wined this game without including the winner that the name is mentioned) other have won the game”. 'player name' and (the total numbers of players who wined this game without including the winner that the name is mentioned) is colored green. for the winners screen they see their name and it says x other players win. For the players that doesn't win they see the name that claims first name and x other players won. The main area shows a centered 5x5 Bingo card grid with colorful headers: Blue “B”, Red “I”, Green “N”, Yellow “G”, and Purple “O”. The squares grid contain bright gray numbers for uncalled numbers, yellow highlights marking all called numbers, and green highlights for the winning line patterns. and a vibrant green 'Free' in the free space at the middle. Unmarked numbers remain in plain white boxes for contrast. Below the card, a subtle label Board number 'x'  in light gray. If the winners is more than one it lets you to scroll to see all the bingo card with their board number. At the bottom screen, a glowing orange rectangular panel that is countdown timer in bold white text. The countdown counts  7 seconds and after the count down finished(the winner(s) reveal is done) all player get redirected to  picking page(/game_picking)  to play again. The whole design is polished, professional, and engaging, resembling a high-quality telegram mini app vibrant colors, glossy highlights, and clean typography.
+The game pages logics detailed
+The game page logic detailed
+picking Phase(page 1)
+When a new game starts the backend cleans all the previous game data from Redis and create a new games row and puts it picking phase. then Redis gets this data's from PostgreSQL database. This data's are game:<id>:phase from from games.phase, game<id>:stake_amount from stake.stake_amount. And then backend stores the time 30 second from now (Now + 30 second) by default to game:<id>:end_time. then the countdown starts. for a smooth countdown the frontend gets the left amount of time and  calculate to know what amount of times left to and start count down. this means the player picking starts 
+ - for a player to pick a board number that board must not be picked by another players. this is checked from Redis players pick 
+ - for a player to pick a board number their wallet(withdrawal_wallet + non_withdrawal_wallet) balance must be equal or greter than the stake. this is checked from PostgreSQL users wallet.
+If the player fulfill the above requirement they can pick number. when they pick board number by clicking(touching) them. Their board number alongside with their telegram id get stored(keep tracked) in Redis in game:<id>:picked key. Players can pick, change and even unpick their board number.
+After the picking phase countdown is finished the backed checks there is at least 5 players that picked board number. If false the countdown restart and a notification appears saying (Sorry. for the game to start there must be at least 5 players) using React-Toastify. If true all players get routed to playing page. Then the stake amount get decreased from the user wallet. Primarily the stake get decreased from the withdrawal_wallet, but if the withdrawal_wallet is less than the stake and the user total wallet is equal or greater than the stake amount, then the backend gets what left from withdrawal_wallet and calculate how much is left to equal the stake amount and then gets the left amount from the non_withdrawal wallet. so the stake get decreased from both. but if the withdrawal_wallet is less than 1 it simply decrease the stake amount from the non_withdrawal_wallet.
+And after that the backend stores all data's in PostgreSQL and what data's left to store Redis database. This data's are prize amount, players board, active players, house profit, and shuffled number
+1. Prize amount is ((total player that picked board number * the stake amount) * 0 .85). This get stored to PostgreSQL game.prize_amount in and stored in Redis game<id>:prize_amount
+2. Pllayer board is a JSONB file that stores players picked board with their telegram id. And this get saved to PostgreSQL player_boards. game. We don't need to push it Redis since it already have the data
+3. Active players is the total players number that picked board number. The backend count all players that picked board from redis and store it in PostgreSQL game.active_players and store it in Redis game<id>:active_players.
+4. House profit is ((active_players * the stake amount) * 0 .15). The backend calculate the house profit and store it in PostgreSQL game.house_profit. we don't need to save it to Redis since we don't use the data for the game 
+5. The backend shuffle numbers from 1 to 75 and store that number in orders to PostgreSQL game.shuffled_nums in JSONB file and stores it in Redis game:<id>:shuffled.
+6. The back end set the end time by current time to PostgreSQL games.started_at. 
+After the backend Stores all needed data's it change the PostgreSQL game.phase to started and Redis game:<id>:phase to started
+
+started phase or playing page(page 2)
+In the playing page all player that picked board number will have 5 * 5 bingo card grid that they use to keep track of the called number. They can dabb by single click(touch) or undabb by clicking(touching) again
+The master bingo Calles sheet helps the player to see all the called number by coloring the called number to green for current called number and orange for all the previous called number. This helps the player if they missed to see the called number on the latest called numbers that shows only three recently called numbers.
+After the player believe they had the winning pattern they click bingo button. When they click bingo the client sends their board number along side with their telegram id . And by using the player board number the backend searches the database and gets the the full array bingo card from the PostgreSQL board_numbers.bingo_cards. Then the backend gets all the current called numbers from Redis game<id>:called by orders. Then the backend uses the bingo card numbers array and the called numbers and check that the player has the winning pattern. This patterns are vertical, horizontal, four corners. To win the player must have at least one of this patter.
+If more than 1 players click bingo in 1 second window frame and have the winning pattern they will share the prize.
+After the winner(s) is confirmed  the backend stores the telegram_id(s) and board_number(s) to PostgreSQL winners_history.telegram_id (if there is one winner there is only one row but if there is multiple winners there would be multiple rows)  and winners_history.board_id (if there is multiple winners it get stores corresponding to their telegram id). And this data gets saved to game:<id>:winner.
+. And other data's:
+1.  The backend stores the game_id it to PostgreSQL winners_history.game_id.
+2. The backend stores the prize amount to PostgreSQL winners_history.prize_amount. Prize amount is what the player(s) wins. If there is only one winner the total prize amount will be credited and stored for that winner, but if there is more player than 1 they will be divided it equally and credited and stored for each player. 
+3. The backend set the end time by current time to PostgreSQL games.finished_at.
+And then the back end credited the winner(s) withdrawal_wallet the prize amount(s)
+After that the backend change the PostgreSQL game. Phase to 'finishedl'. and the backend sets  Redis game:<id>:phase to 'winner_reveal' with game:<id>:end_time  = 7 second . this triggers all player to get popup 
+
+Winner reveal phase (popup display)
+The pop up display shows the winner(s) bingo card and their winning pattern by highlighting the winning pattern green. The backend gets get the winner(s) name and winner(s) boards from Redis game:<id>:winner
+and it displays their first name(s) bingo card(s) along with board number(s). for the count down to be smooth the frontend takes the end time from Redis and calculate the left amount of time and start counting.
+After the countdown is finished the backend removes all the previous Redis data's  and start new game in picking phase
+If Redis crashes at some point the backend checks the game phase and gives all the needed information for that.
+ - If it is in picking phase all players starts to pick from the beginning
+ - if it is in started phase it gets game:<id>:phase,  game:<id>:picked, game<id>:shuffled, game<id>:prize_amount, game<id>:stake_amount,     game<id>:active_player from PostgreSQPL games.phase, players_board.players_pick, game.shuffled_num, games.prize_amount, stake.stake_amount, games.active_player. and starts to call the shuffled numbers in order and store them in Redis game<id>:called.
+ - If it is in finished phase it then it start new game
+Admin side Deposit system
+When a player transfers money a bank confirmation will sent to the sender(player) and the receiver (admin phone), so by using the transaction reference id the backend can validate the payment. Here is how it work: 
+SMS confirmation on the admin(receiver) phone.
+Using services like sms-forwarder.com the admin phone will set to Forward to the private endpoint like /sms/admin/gW8k9Hn7hr78ty3g. After admin a number is added because /admin is a predictable endpoint, so it protect the app from peoples that try's to scam a deposit. By using source address and SMS content parameters the sms forwarder app can be set to forward only the SMS from the selected bank and when money is received. When the server received the full SMS confirmation text the backend will parse the SMS and gets the amount and reference id and store these datas to PostgreSQL deposits.amount and deposits.tx_reference. this data helps to validate the users deposits.
+This is what the admin(recipient) SMS confirmation text looks like this
+"
+Dear Danel your Account 1*****9046 has been Credited with ETB 5.00. Your Current Balance is ETB 240.00 Thank you for Banking with CBE! https://apps.cbe.com.et:100/?id=FT25234JC66N61649046 
+
+Dear SEWAGEGN, your account 2***47 was credited with ETB 50.00 by DANEL WAGAYE WALELGN. Available Balance:  ETB 219.65. Receipt: https://cs.bankofabyssinia.com/slip/?trx=FT2523499LD678729 
+Feedback: https://cs.bankofabyssinia.com/cs/?trx=CFT2523499LD6 For help, call 8397 (24/7 Toll-Free). Bank of Abyssinia. 
+
+Dear sewagegn, you received 5.00Br. from 251924570285 - DANIEL WAGAYE WALELGN on 22/08/25 15:22,Txn ID CHM4SIDRS0.Your CBE Birr account balance is 5.00Br. Thank you! For invoice https://cbepay1.cbe.com.et/aureceipt?TID=CHM4SIDRS0&PH=251936939576
+
+Dear Danieal 
+You have received ETB 2,000.00 from Asnake Kumie(2519****7164)  on 18/09/2025 11:56:40. Your transaction number is CII9W5N8F1. Your current E-Money Account balance is ETB 2,587.44.
+Thank you for using telebirr
+Ethio telecom
+"
+This are the transaction reference number in order FT25234JC66N69004293, FT2523499LD678729, CHM4SIDRS0 and CID2TAT98W that the frontend gets from the full SMS text. this  transaction refernce numbers can get changed but the SMS text format is permanent. 
+Database design
+We’ll use:
+PostgreSQL → reliable relational DB
+Redis → in-memory cache for speed (balances, game state, etc.)
+
+Postgres is “source of truth” → all final balances, transactions, referral history, etc. live here.
+Redis is a fast temporary layer → frequently requested info (balance, game state, active players) lives here so your bot replies instantly.
+Sync: Redis should expire keys or be refreshed whenever Postgres updates.
+
+Database Tables (Postgres)
+Here’s a breakdown of tables that the game needs
+
+users
+Stores each player.
+CREATE TABLE users (
+    telegram_id BIGINT PRIMARY KEY ,             -- Telegram unique ID
+    phone_number int,              -- User phone number from telegram
+    username TEXT,                   -- Telegram @username
+    first_name TEXT,                  --  Telegram name 
+    last_name TEXT,                   -- Optional Telegram last name
+    withdrawable_wallet NUMERIC(12,2) DEFAULT 0,           -- money player can withdraw
+    non_withdrawable_wallet  NUMERIC(12,2) DEFAULT 0,       -- non-withdrawable/only for playing game
+    referral_count INT DEFAULT 0,           -- number of referrals (resets monthly via logic)
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+deposits
+deposits validated from bank/SMS.
+CREATE TABLE deposits (
+    deposit_id       BIGSERIAL PRIMARY KEY,
+    telegram_id     BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    bank  TEXT,                                     
+    amount          NUMERIC(12,2) NOT NULL,
+    tx_reference    TEXT UNIQUE,                   -- bank transaction number
+    status          TEXT CHECK (status IN ('pending','approved'))
+                        DEFAULT 'pending',
+    created_at      TIMESTAMP DEFAULT NOW(),
+    approved_at     TIMESTAMP
+
+withdrawals_request
+User withdrawal requests.
+CREATE TABLE withdrawals_request (
+    withdrawal_id              BIGSERIAL PRIMARY KEY,
+    telegram_id     BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    bank    TEXT,                                              -- user chosen bank
+    account_holder_name  TEXT                 -- bank account holder name user enters
+    account_num  BIGINT                             -- banck account number user enters
+    amount          NUMERIC(12,2) NOT NULL,
+    status          TEXT CHECK (status IN ('pending','approved','declined'))
+                        DEFAULT 'pending',
+    admin_tx_number TEXT,                           -- admin-entered bank tx number
+    created_at      TIMESTAMP DEFAULT NOW(),
+    approved_at      TIMESTAMP
+);
+
+transfer_history
+Peer-to-peer wallet transfers.
+CREATE TABLE transfer_history (
+    transfer_id             BIGSERIAL PRIMARY KEY,
+    sender_id      BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    receiver_id    BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    wallet  TEXT,                                            -- which wallet was used during transfer
+    amount         NUMERIC(12,2) NOT NULL,
+    commission     NUMERIC(12,2) DEFAULT,
+    created_at     TIMESTAMP DEFAULT NOW()
+);
+
+board_numbers 
+All unique 5x5 boards pre-generated
+CREATE TABLE board_numbers (
+    board_id          SMALLINT PRIMARY KEY,            -- 1..400
+    bingo_card  JSONB NOT NULL                   -- e.g. [[1,16,33,52,70], ...]
+);
+
+Stake.
+The game stake amount that the super admin can update.
+Only one row needed 
+CREATE TABLE stake (
+    stake_amountSMALLINT PRIMARY KEY              -- e.g. 10
+
+games
+One row per Bingo round.
+CREATE TABLE games (
+    game_id        BIGSERIAL PRIMARY KEY,
+    stake_amount   NUMERIC(12,2) NOT NULL,
+    phase         TEXT CHECK (phase IN ('picking','started','finished'))
+                       DEFAULT 'picking',
+    shuffled_nums  JSONB NOT NULL,         -- full shuffled 1–75 list
+    prize_amount     NUMERIC(12,2),             -- 80% of the total stake
+    house_profit       NUMERIC(12,2),              -- 15% of the total stack
+    active_players SMALLINT,                         -- total numbers of the player that picked board number
+    started_at     TIMESTAMP DEFAULT KNOW(),
+    finished_at    TIMESTAMP
+);
+
+player_boards 
+CREATE TABLE player_boards (
+   CREATE TABLE player_boards (
+    id        BIGSERIAL PRIMARY KEY, 
+    game_id      BIGINT REFERENCES games(game_id),
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    players_pick JSONB NOT NULL  -- [{ "telegram_id": "12345", "board_id": 12 }, …]
+);
+
+
+Winners_history
+All winners for each game.
+CREATE TABLE winners_history (
+    id             BIGSERIAL PRIMARY KEY,
+    game_id        BIGINT REFERENCES games(game_id) ON DELETE CASCADE,
+    telegram_id    BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    board_id    SMALLINT REFERENCES board_numbers(id),
+    prize_amount   NUMERIC(12,2) BIGINT REFERENCES games(prize_amount) ,                      -- winner total prize
+    won_at         TIMESTAMP DEFAULT NOW()
+);
+
+referrals_history
+Tracks every successful referral for auditing.
+CREATE TABLE referrals_history (
+    referral_id                 BIGSERIAL PRIMARY KEY,
+    referrer_id        BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    referred_user_id   BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+    rewarded BOOLEAN DEFAULT FALSE, 
+    created_at         TIMESTAMP DEFAULT NOW()
+);
+Redis Databse Design
+This is how Redis works, if the game status is in picking it stores all the players picked number stores. players can change or unpick board number. after the picking count down is finished all Redis data sends players picked board to the database players boards.  and after the backend shuffled and puts the shuffled numbers in games shuffled nums the game status changed to calling. the shuffled number also given to Redis so it will calls the shuffled numbers in orders. when the game status is in calling all shuffled number from Redis is started calling in controlled second. until there will be a winner Redis will call the numbers. when a player claims to win the backend takes the player picked board and called number from Redis and validate if the match the winning pattern. if false it keep calling numbers from Redis. Redis will have game status, player picked board numbers, shuffled numbers and called numbers. if Redis crashes it gets game status from the database game status. if it is in picking phase the picking count down starts from zero and starts to keep all the players picked board along with their telegram id. but if it is in calling status it gets player picked board numbers, shuffled numbers and called numbers will be zero by default since the main database doesn't keep called numbers from the database, and the backend starts to call all shuffled numbers numbers.
+
+1, Core Keys
+Key=   game:<id>:phase, game:<id>:end_time, game:<id>:picked,    game:id>:shuffled,   game<id>:called, game<id>:prize_amount, game:<id>:stake_amount, game<id>:active_players, game:<id>:winner.
+Type =  string,  integer (epoch ms), Hash, list, int, int, int, int, list
+Purpose = "picking" / "calling" / "winner_reveal",  current Phase end timestamp,   (field = telegram_id, value = board_id),   ordered 75 shuffled numbers [15, 42, 8, ...,    called numbers [15, 42],  (total player which picked board number * 10) * 0.80, 10, total number of players that picked board numbers, winners name and their picked board numbers.
+TTL  = until game ends,     until current phase ends,    until game ends,  until game ends,      until game ends,   until the game ends,  until the game ends,   until the game ends, until game ends.
+
+2. Game phases
+A. Picking phase
+Backend sets:
+  - SET game:<id>:phase "picking"
+  - SET game:<id>:end_time <now + 30 second> 
+  -  Get the stake amount from PostgreSQL stake.stake_amount and store it to PostgreSQL games.stake_amount and in Redis game<id>:stake_amount. 
+ player pick boards:
+  - Players pick → HSET game:{gid}:picks <telegram_id> <board_id>
+  - If they change/unpick before the count down is finished → HDEL or HSET new board.
+B. Countdown Handling
+Only store end_time, not a decreasing counter.
+A worker or the bot checks:
+      const end = await redis.get(`game:${id}:end_time`);
+      const remaining = end - Date.now();
+If Redis crashes, backend reads DB phase and if it is in picking then the picking phase then it re-primes Redis with the all needed data and then starts the countdown and keep track of picking  . if it was in started phase then the backend reprimes redis with all needded data from PostgreSQL.
+C. Minimum Players Extension
+When countdown hits 0:
+ 1. HLEN game:<id>:picked
+ 2. If <5 → SET game:<id>:end_time now + 30 second (extend)
+ 3. Else → transition to started phase.
+D. Calling phase
+After 30 s, backend:
+ Saves the player picked to PostgreSQL (Player_boards table in player_pick column  in JSONB file).
+Count all The player in Redis game:<id>:picked and store it to PostgreSQL games.active_players and in Redis game:<id>:active_players
+ Generates shuffled numbers  and saves the shaffled  numbers to  PostgreSQL (        Games table in shuffled_nums column in JSONB file). 
+  Push the shuffled numbers to Redis game<id>:shuffled. 
+   Set the game phase to started in PostgreSQL (game table) and in Redis game<id>:phase. 
+  Sets prize_amount (total player which picked board number * Redis game:<id>:stake_amount ) * 0.80 ) to PostgreSQL (game table) and in Redis game:<id>:prize_amount. 
+  After all data is saved by using scheduler the shuffled number will be called every 2 seconds  and  this  called numbers will be saved on Redis game<id>:called.
+- If Redis crashes the backend checks the game status and according to the status it gets all the data to Redis from PostgreSQL.
+4️, Winner check
+When a player taps Bingo!:
+  - Gets player board from Redis game:<id>:picked. 
+  - Gets called number from Redis game:<id>:called.  
+  - Gets the player picked board 5 * 5 bingo card from PostgreSQL (board_numbers) as JSONB file.
+  - Validate if the player has the winning pattern
+E. Winner Reveal
+When a winner is verified:
+  Sets the PostgreSQL game table phase to finished.
+  credits the winner(s) the prize_amount (if the winners is more than one they will share (devided) the prize amount and get credited to their withdrawal_wallet.
+  Sets all data to PostgreSQL winners_history. (game_id, telegram_id, board_id, prize_amount,). 
+   Store the winner(s) first name and board number in Redis game:<id>:winner. 
+   SET game:<id>:phase "winner_reveal".
+   SET game:<id>:end_time <now + 7_000>.
+After reveal countdown  backend Starts a new game in picking phase
+5️, Game end & cleanup
+When winner(s) confirmed:
+   - Persist any final stats to Postgres.
+   - DEL game:{id}:.
+Crash recovery logic
+Check game_status in Postgres (picking or calling).
+If picking:
+   - Redis keys may be gone → start a new picking countdown (old picks lost, players re-pick, gets stake amount from PostgreSQL stake.stake_amount).
+If calling:
+  - Load picks from PostgreSQL players_boards.
+  - Load shuffled_nums from Postgres (games.shuffled_nums).
+  - called numbers starts keep tracks from zero.
