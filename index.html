@@ -70,6 +70,39 @@
     <div class="container mx-auto px-4 py-8 max-w-5xl">
         <h1 class="text-3xl font-bold text-center mb-8">Telegram Message Sender</h1>
         
+        <div class="bg-gray-800 rounded-lg p-6 mb-4">
+            <h2 class="text-xl font-semibold mb-4">User Management</h2>
+            <p class="text-sm text-gray-400 mb-4">Register users to enable the {name} personalization feature</p>
+            
+            <div class="flex gap-2 mb-4">
+                <input 
+                    type="text" 
+                    id="regChatId" 
+                    placeholder="Chat ID (e.g., 123456789)"
+                    class="flex-1 bg-gray-900 text-white px-4 py-2 rounded-lg border border-gray-700"
+                >
+                <input 
+                    type="text" 
+                    id="regFirstName" 
+                    placeholder="First Name"
+                    class="flex-1 bg-gray-900 text-white px-4 py-2 rounded-lg border border-gray-700"
+                >
+                <button 
+                    onclick="registerUser()" 
+                    class="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold"
+                >
+                    Add User
+                </button>
+            </div>
+            
+            <div class="bg-gray-900 rounded-lg p-4">
+                <h3 class="text-sm font-semibold mb-2">Registered Users (<span id="userCount">0</span>)</h3>
+                <div id="usersList" class="max-h-40 overflow-y-auto text-sm">
+                    <p class="text-gray-500">No users registered yet</p>
+                </div>
+            </div>
+        </div>
+        
         <div class="grid md:grid-cols-3 gap-4 mb-4">
             <div class="bg-gray-800 rounded-lg p-4">
                 <h3 class="text-sm font-semibold mb-2">Send Mode</h3>
@@ -244,6 +277,71 @@
     
     <script>
         let inlineKeyboard = [];
+        
+        async function registerUser() {
+            const chatId = document.getElementById('regChatId').value;
+            const firstName = document.getElementById('regFirstName').value;
+            
+            if (!chatId || !firstName) {
+                showNotification('Please enter both Chat ID and First Name', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/register-user', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        first_name: firstName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`User ${firstName} registered successfully!`, 'success');
+                    document.getElementById('regChatId').value = '';
+                    document.getElementById('regFirstName').value = '';
+                    loadUsers();
+                } else {
+                    showNotification('Failed to register user: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showNotification('Error: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadUsers() {
+            try {
+                const response = await fetch('/get-users');
+                const result = await response.json();
+                
+                if (result.success && result.users) {
+                    const usersList = document.getElementById('usersList');
+                    const userCount = document.getElementById('userCount');
+                    
+                    if (result.users.length === 0) {
+                        usersList.innerHTML = '<p class="text-gray-500">No users registered yet</p>';
+                        userCount.textContent = '0';
+                    } else {
+                        usersList.innerHTML = result.users.map(user => 
+                            `<div class="py-2 border-b border-gray-700">
+                                <span class="font-medium">${user.first_name}</span> 
+                                <span class="text-gray-400">(ID: ${user.chat_id})</span>
+                            </div>`
+                        ).join('');
+                        userCount.textContent = result.users.length;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        }
+        
+        window.addEventListener('load', loadUsers);
         
         document.getElementById('sendMode').addEventListener('change', function() {
             const chatIdContainer = document.getElementById('chatIdContainer');
