@@ -57,12 +57,7 @@ class HTMLToTelegramParser(HTMLParser):
             self.telegram_text += f'<a href="{href}">'
             self.tag_stack.append('a')
         elif tag == 'span':
-            color = attrs_dict.get('data-color', '')
-            if color:
-                self.telegram_text += f'<span class="tg-spoiler">'
-                self.tag_stack.append('span')
-            else:
-                self.tag_stack.append(None)
+            self.tag_stack.append(None)
         elif tag == 'div':
             class_name = attrs_dict.get('class', '')
             if class_name and 'telegram-quote' in class_name:
